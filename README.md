@@ -6,6 +6,7 @@ Basic application that display XKCD comics for learning purposes.
 
 Official Elm website [here](https://elm-lang.org)
 Elm packages website [here](https://package.elm-lang.org/)
+Link to elm-ui package [here](https://package.elm-lang.org/packages/mdgriffith/elm-ui/latest/);
 
 How to Install Elm [here](https://guide.elm-lang.org/install/elm.html).
 XKCD API documentation [here](https://xkcd.com/json.html).
