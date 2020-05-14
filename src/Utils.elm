@@ -1,8 +1,12 @@
-module Utils exposing (errorToString)
+module Utils exposing (errorToString, randomInt)
 
 import Http
+import Random
 
 
+
+randomInt : Int -> Random.Generator Int
+randomInt max = Random.int 1 max
 
 errorToString : Http.Error -> String
 errorToString error =

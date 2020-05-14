@@ -5,9 +5,10 @@ import Html exposing (Html, div, h2, text, button, img, ul, li, h3)
 import Html.Attributes exposing (src, style)
 import Html.Events exposing (onClick)
 import Http
-import Json.Decode exposing (Decoder, field, string)
+import Json.Decode exposing (Decoder, field, string, map2, int)
+import Random
 
-import Utils exposing (errorToString)
+import Utils exposing (errorToString, randomInt)
 
 
 
@@ -28,23 +29,34 @@ main =
 -- MODEL
 
 
+type alias Comic =
+    { src : String
+    , num : Int
+    }
+
 type Load
   = Failure
   | Loading
-  | Success String
+  | Success Comic
 
 type alias Model =
   { load : Load
+  , maxIndex : Int
+  , comics : List Comic
   , errors : List String
+  , urls : List String
   }
+
+currentComicUrl : String
+currentComicUrl = "https://xkcd.com/info.0.json"
 
 initModel : Model
 initModel =
-  Model Loading []
+  Model Loading 0 [] [] []
 
 init : () -> (Model, Cmd Msg)
 init _ =
-  (initModel, getRandomCatGif)
+  (initModel, getComic GotCurrentComic currentComicUrl)
 
 
 
@@ -53,22 +65,63 @@ init _ =
 
 type Msg
   = MorePlease
-  | GotGif (Result Http.Error String)
+  | NewNumber Int
+  | GotRandomComic (Result Http.Error Comic)
+  | GotCurrentComic (Result Http.Error Comic)
 
+newNumber : Int -> Cmd Msg
+newNumber max =
+  Random.generate NewNumber (randomInt max)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     MorePlease ->
-      ({model | load = Loading}, getRandomCatGif)
+      ({model | comics = []}, newNumber model.maxIndex)
 
-    GotGif result ->
+    NewNumber nbr ->
+      let
+        url = "https://xkcd.com/" ++ String.fromInt nbr ++ "/info.0.json"
+      in
+        if nbr > 0 then
+          ({model | urls = url :: model.urls}
+          , getComic GotRandomComic url)
+        else
+          (model, newNumber model.maxIndex)
+
+    GotRandomComic result ->
       case result of
-        Ok url ->
-          ({model | load = Success url}, Cmd.none)
+        Ok comic ->
+          ({model | comics = comic :: model.comics}
+          , if List.length model.comics < 1 && List.isEmpty model.errors then
+            newNumber model.maxIndex
+          else
+            Cmd.none
+          )
 
         Err error ->
-          ({model | load = Failure, errors = errorToString error :: model.errors}, Cmd.none)
+          ({model
+            | load = Failure
+            , errors = errorToString error :: model.errors
+          }, Cmd.none)
+
+    GotCurrentComic result ->
+      case result of
+        Ok comic ->
+          ({ model
+            | load = Success comic
+            , maxIndex = comic.num
+          }, if List.length model.comics < 1 && List.isEmpty model.errors then
+            newNumber model.maxIndex
+          else
+            Cmd.none
+          )
+
+        Err error ->
+          ({model
+            | load = Failure
+            , errors = errorToString error :: model.errors
+          }, Cmd.none)
 
 
 
@@ -95,6 +148,10 @@ viewError : String -> Html Msg
 viewError error =
   li [] [ text error ]
 
+viewComic : Comic -> Html Msg
+viewComic comic =
+  li [] [ img [ src comic.src ] [] ]
+
 viewGif : Model -> Html Msg
 viewGif model =
   case model.load of
@@ -105,15 +162,19 @@ viewGif model =
         , h3 [] [ text "Errors" ]
         , ul []
           (List.map viewError model.errors)
+        , ul []
+          (List.map viewError model.urls)
         ]
 
     Loading ->
       text "Loading..."
 
-    Success url ->
+    Success comic ->
       div []
         [ button [ onClick MorePlease, style "display" "block" ] [ text "More Please!" ]
-        , img [ src url ] []
+        , img [ src comic.src ] []
+        , ul []
+          (List.map viewComic model.comics)
         ]
 
 
@@ -121,13 +182,15 @@ viewGif model =
 -- HTTP
 
 
-getRandomCatGif : Cmd Msg
-getRandomCatGif =
+getComic : (Result Http.Error Comic -> Msg) -> String -> Cmd Msg
+getComic msg url =
   Http.get
-    { url = "https://xkcd.com/info.0.json"
-    , expect = Http.expectJson GotGif gifDecoder
+    { url = url
+    , expect = Http.expectJson msg comicDecoder
     }
 
-gifDecoder : Decoder String
-gifDecoder =
-  field "img" string
+comicDecoder : Decoder Comic
+comicDecoder =
+  map2 Comic
+    (field "img" string)
+    (field "num" int)
