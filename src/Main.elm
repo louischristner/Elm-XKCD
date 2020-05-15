@@ -1,12 +1,16 @@
 module Main exposing (main)
 
 import Browser
-import Html exposing (Html, div, h2, text, button, img, ul, li, h3)
-import Html.Attributes exposing (src, style)
-import Html.Events exposing (onClick)
-import Http
+import Html exposing (Html)
+import Element exposing (..)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Events exposing (..)
+import Element.Font as Font
+import Element.Input as Input
 import Json.Decode exposing (Decoder, field, string, map2, int)
 import Random
+import Http
 
 import Utils exposing (errorToString, randomInt)
 
@@ -44,7 +48,6 @@ type alias Model =
   , maxIndex : Int
   , comics : List Comic
   , errors : List String
-  , urls : List String
   }
 
 currentComicUrl : String
@@ -52,7 +55,7 @@ currentComicUrl = "https://xkcd.com/info.0.json"
 
 initModel : Model
 initModel =
-  Model Loading 0 [] [] []
+  Model Loading 0 [] []
 
 init : () -> (Model, Cmd Msg)
 init _ =
@@ -77,15 +80,14 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     MorePlease ->
-      ({model | comics = []}, newNumber model.maxIndex)
+      ({model | comics = []}, getComic GotCurrentComic currentComicUrl)
 
     NewNumber nbr ->
       let
         url = "https://xkcd.com/" ++ String.fromInt nbr ++ "/info.0.json"
       in
         if nbr > 0 then
-          ({model | urls = url :: model.urls}
-          , getComic GotRandomComic url)
+          (model, getComic GotRandomComic url)
         else
           (model, newNumber model.maxIndex)
 
@@ -139,42 +141,52 @@ subscriptions _ =
 
 view : Model -> Html Msg
 view model =
-  div []
-    [ h2 [] [ text "XKCD - current comic" ]
-    , viewGif model
-    ]
+  layout []
+    <| column [ height fill, width fill ]
+      [ text "XKCD - current comic"
+      , viewGif model
+      ]
 
-viewError : String -> Html Msg
+viewError : String -> Element Msg
 viewError error =
-  li [] [ text error ]
+  el []
+    <| text error
 
-viewComic : Comic -> Html Msg
+viewComic : Comic -> Element Msg
 viewComic comic =
-  li [] [ img [ src comic.src ] [] ]
+  el []
+    <| image []
+      { src = comic.src
+      , description = ""
+      }
 
-viewGif : Model -> Html Msg
+viewGif : Model -> Element Msg
 viewGif model =
   case model.load of
     Failure ->
-      div []
+      column [ width fill ]
         [ text "I could not load your XKCD comic. "
-        , button [ onClick MorePlease ] [ text "Try Again!" ]
-        , h3 [] [ text "Errors" ]
-        , ul []
-          (List.map viewError model.errors)
-        , ul []
-          (List.map viewError model.urls)
+        , Input.button []
+          { onPress = Just MorePlease
+          , label = text "Try Again!"
+          }
+        , text "Errors"
+        , Element.column [ width fill ]
+          <| List.map viewError model.errors
         ]
 
     Loading ->
       text "Loading..."
 
     Success comic ->
-      div []
-        [ button [ onClick MorePlease, style "display" "block" ] [ text "More Please!" ]
-        , img [ src comic.src ] []
-        , ul []
-          (List.map viewComic model.comics)
+      column [ width fill ]
+        [ viewComic comic
+        , Input.button []
+          { onPress = Just MorePlease
+          , label = text "More random comics!"
+          }
+        , Element.row [ width fill ]
+          <| List.map viewComic model.comics
         ]
 
 
